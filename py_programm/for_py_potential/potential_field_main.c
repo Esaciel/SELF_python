@@ -19,14 +19,21 @@ void readfile(const char *filename, int *x, int *y, point_charge *charges, int *
     fclose(file);
 }
 
-void writefile(const char *filename, double value)
+void writefile(const char *filename, double **field, int rows, int cols)
 {
     FILE *file = fopen(filename, "w");
     if (file == NULL)
     {
         return;
     }
-    fprintf(file, "%.10lf\n", value);
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {
+            fprintf(file, "%.10lf ", field[i][j]);
+        }
+        fprintf(file, "\n");
+    }
     fclose(file);
 }
 
@@ -34,11 +41,13 @@ int main(int argc, char **argv)
 {
     char *in_file = argv[1];
     char *out_file = argv[2];
-    int x, y, count;
+    int rows, cols, count;
     point_charge charges[1000];
 
-    readfile(in_file, &x, &y, charges, &count);
-    double res = calculate_single_point_potential(x, y, charges, count);
-    writefile(out_file, res);
+    readfile(in_file, &rows, &cols, charges, &count);
+    double **potential_field = NULL;
+    calculate_potential_field(rows, cols, charges, count, &potential_field);
+    writefile(out_file, potential_field, rows, cols);
+    free_potential_field(rows, potential_field);
     return 0;
 }

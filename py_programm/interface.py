@@ -5,6 +5,8 @@ import subprocess
 from extras import *
 import os
 import glob
+import numpy as np
+from PIL import Image
 
 
 class InterfaceApp:
@@ -12,7 +14,7 @@ class InterfaceApp:
         self.root = mainroot
         self.root.title("Интерфейс программы")
         self.root.state('zoomed')
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
         self.root.configure(bg="#3b3b3b")
 
         self.canvas = tk.Canvas(mainroot, bg="#707070", highlightthickness=0)
@@ -36,7 +38,6 @@ class InterfaceApp:
         self.buttons = []
         self.electric_field = None
         self.potential_field = None
-        self.current_field = None
         self.point_label = None
         self.create_right_panel()
 
@@ -108,7 +109,7 @@ class InterfaceApp:
 
         x, y = event.x, event.y
         if self.current_mode == "Потенциалы":
-            val = self.calculate_potential(y, x)
+            val = self.potential_field[y][x]
             self.info_near_cursor.config(text=f"потенциал: {val}")
         elif self.current_mode == "Ввод":
             self.info_near_cursor.config(text=f"x: {y}, y: {x}")
@@ -185,6 +186,8 @@ class InterfaceApp:
                 self.points.remove(i)
 
     def hide_inputs_and_buttons(self):
+        # Вот тут нужна еще функция для удаления картинки
+        # Само собой - когда сделаете функцию для добавления картинки на канвас
         for entry in self.entries:
             entry.place_forget()
 
@@ -193,26 +196,80 @@ class InterfaceApp:
 
         self.info_near_cursor.place_forget()
 
+    def interpolate_color(self, color1, color2, factor):
+        return tuple([
+            int(color1[i] + (color2[i] - color1[i]) * factor) for i in range(3)
+        ])
+
+    def get_color(self, percentile):
+        blue = (0, 255, 255)
+        yellow = (255, 255, 0)
+        scarlet = (255, 36, 0)
+
+        lp = 48
+        d = 50 - lp
+        mp = lp + d
+        up = mp + d
+
+        if percentile <= lp:
+            return blue
+        elif lp < percentile <= mp:
+            factor = (percentile - lp) / d
+            return self.interpolate_color(blue, yellow, factor)
+        elif mp < percentile <= up:
+            factor = (percentile - mp) / d
+            return self.interpolate_color(yellow, scarlet, factor)
+        else:
+            return scarlet
+
+    def normalize_matrix(self, matrix):
+        min_val = np.min(matrix)
+        max_val = np.max(matrix)
+        norm_matrix = 100 * (matrix - min_val) / (max_val - min_val)
+        return norm_matrix
+
+    def rgb_to_hex(self, rgb):
+        return '#{:02x}{:02x}{:02x}'.format(*rgb)
+
+    def draw_potential_field(self):
+        img = Image.new('RGB', (self.cols, self.rows))
+        pixels = img.load()
+        tmp = self.normalize_matrix(self.potential_field)
+        for row in range(self.rows):
+            for col in range(self.cols):
+                value = tmp[row][col]
+                color = self.get_color(value)
+                pixels[col, row] = color
+
+        img.save("img.png", format="PNG")
+
+        # Тут надо придумать как вставлять картинку на канвас
+        # Она должна быть поверх фона, но ниже точек
+        # И надо уметь её удалять при выходе из режима потенциалов
+
     def on_input_button(self):
         self.hide_inputs_and_buttons()
         self.create_right_panel()
         self.current_mode = "Ввод"
+        self.potential_field = None
+        self.electric_field = None
 
     def on_potentials_button(self):
         self.hide_inputs_and_buttons()
         self.current_mode = "Потенциалы"
+        charges = [i[1] for i in self.points]
+        infile = "infile_potential.txt"
+        outfile = "outfile_potential.txt"
+        write_potential(infile, self.rows, self.cols, charges)
+        subprocess.run(["potential_field.exe", infile, outfile])
+        self.potential_field = read_potential(outfile, self.rows)
+        self.draw_potential_field()
 
     def on_electric_field_button(self):
         self.hide_inputs_and_buttons()
 
     def calculate_potential(self, x, y):
-        charges = [i[1] for i in self.points]
-        infile = "infile_potential.txt"
-        outfile = "outfile_potential.txt"
-        write_potential(infile, x, y, charges)
-        subprocess.run(["potential.exe", infile, outfile])
-        val = read_potential(outfile)
-        return val
+        pass
 
 
 if __name__ == "__main__":
